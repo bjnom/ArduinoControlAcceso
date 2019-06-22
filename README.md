@@ -7,4 +7,4 @@ Ejemplo control acceso con arduino RC522, Arduino Nano
 
 Diagrama Fritzing
 
-![alt text](https://raw.githubusercontent.com/bjnom/ArduinoControlAcceso/master/contro_acceso_fritzing.png)
+![alt text](https://raw.githubusercontent.com/bjnom/ArduinoControlAcceso/master/control_acceso_fritzing.png)
