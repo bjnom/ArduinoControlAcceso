@@ -23,28 +23,47 @@
  * GND to GND
  * 
  */
-
+ 
+// Librerias RC522
 #include <SPI.h>
 #include <MFRC522.h>
 #include <Wire.h> 
+
+// Libreria I2C LCD
 #include <LiquidCrystal_I2C.h>
+
+// Libreria Servo
+#include <Servo.h>
+
+// Objeto servomotor
+Servo servomotor;  
   
 //Crear el objeto lcd  dirección  0x27 y 16 columnas x 2 filas
 LiquidCrystal_I2C lcd(0x27,16,2);  
 
-// Lector RC522
+// Pines Lector RC522
 #define RST_PIN         9           
 #define SS_PIN          10          
 MFRC522 mfrc522(SS_PIN, RST_PIN); 
 
-// Piezo Buzzer 
+// Tiempo de acceso (Milisegundo)
+const int tiempo_acceso = 4500;
+
+// Pin Piezo Buzzer 
 const int buzzerPin = 7;
+
+// Pin Servomotor
+const int servoPin =  5;  
 
 /* Registra el UID aqui! */
 // Primer UID NEW_UID que se completara con datos de tarjeta a leer
 #define NEW_UID {0x00, 0x00, 0x00, 0x00}
-// UID Registrado para dar acceso
-#define COM_UID {0x90, 0xB2, 0x1A, 0x83}
+
+// UID de Tarjetas registradas
+byte registro[2][4] = {
+  {0x90, 0xB2, 0x1A, 0x83} ,  // Numerico : 90B21A83
+  {0x02, 0xA1, 0x4F, 0x5C}
+};
 
 /*
 |--------------
@@ -105,6 +124,7 @@ long int concatHex(byte uid[]){
 */
 // Iniciacion de componentes y variables (al encender arduino)
 void setup() {
+    
     /* Monitor Serial */
     Serial.begin(9600);
 
@@ -116,12 +136,18 @@ void setup() {
     mfrc522.PCD_Init();
     // Mostrar mensaje en Serial monitor                   
     Serial.println(F("Lector Datos MIFARE PICC:"));
+    Serial.print("Cantidad registros: ");
+    Serial.println(sizeof(registro)/4);
         
     // Inicializar el LCD I2C
     lcd.init();
     //Encender la luz de fondo.
     lcd.backlight();
     lcd.print("Control Acceso");
+
+    // Inicializar Servo
+    servomotor.attach(servoPin);
+    servomotor.write(0);
 }
 
 
@@ -146,7 +172,7 @@ void loop() {
     // Primer UID (Se completara con datos de tarjeta a leer)
     byte uid[] = NEW_UID;
     // Segundo UID (Registrada al inico para dar acceso - llave correcta)
-    byte com_uid[] = COM_UID;
+    //byte com_uid[] = COM_UID;
     
     // Si se presenta una nueva tarjeta
     if ( ! mfrc522.PICC_IsNewCardPresent() || ! mfrc522.PICC_ReadCardSerial() ) {
@@ -168,33 +194,63 @@ void loop() {
     // Salto de linea
     Serial.println();
 
-    // Compactar valor uid bytes en entero tarjeta leida
+    // Compactar valor uid bytes en numerico tarjeta leida
     long unsigned int leido = concatHex(uid);
 
-    // Compactar valor uid bytes en entero tarjeta registrada
-    long unsigned int registrado = concatHex(com_uid);
+    // Variables para lectura de tarjetas
+    byte card[4];               // Tarjeta para recorrer registros (Hexadecimal)
+    long unsigned int number;   // Tarjeta para recorrer registros (Decimal)
+    bool encontrado = false;    // Determina si se encontro tarjeta
     
-    // Salto de linea
+    // Mostrar tarjeta leida
+    Serial.print("Tarjeta leida: ");
     Serial.println(leido, HEX);
-    Serial.println(registrado, HEX);
-    
-    // Comparar UID registrado (com_uid[]) con UID leido
-    if(registrado == leido){
+
+    for(int r = 0; r < (sizeof(registro)/4); r++){
+      encontrado = false;
+      card[0] = registro[r][0];
+      card[1] = registro[r][1];
+      card[2] = registro[r][2];
+      card[3] = registro[r][3];
+      number = concatHex(card);
+      Serial.print("Comparando: ");
+      Serial.print(number);
+      Serial.print(" : ");
+      Serial.println(leido);
+      // Compactar valor uid bytes en entero tarjeta registrada
+      if (number == leido){
+        encontrado = true;
+        Serial.print("Encontrado en ");
+        Serial.println(r);
         // Sonido de acceso correcto
         sonidoCorrecto();
         // Mostrar mensaje de acceso concedido
         lcd.print("Correcta!");
-    }else{
+        // Conceder acceso
+        servomotor.write(180);
+        // Tiempo del acceso
+        delay(tiempo_acceso);
+        limpiarLCD();
+        // Cerrar acceso
+        lcd.setCursor(0,1);
+        lcd.print("Cerrando...");
+        delay(500);
+        servomotor.write(0);
+        limpiarLCD();
+        break;
+      }
+    }
+
+    // Emitir mensaje al no encontrar UID leido
+    if(encontrado == false){
         // Sonido de error
         sonidoError();
         // Mensaje de error
         lcd.print("No encontrada!");
     }
-
-    // Esperar a que mensaje sea ledido por usuario
-    delay(3000);
+    
+    // Pausar programa
+    delay(1000);
     // Limpiar LCD
     limpiarLCD();
-    // Pausar el programa
-    delay(2000);
 }
